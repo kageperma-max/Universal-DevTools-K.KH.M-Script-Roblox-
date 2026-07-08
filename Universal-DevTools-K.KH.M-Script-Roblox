@@ -1,0 +1,1207 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Global System Store
+local ZenithStore = {
+    Connections = {},
+    MapCache = {},
+    ScriptCache = {},
+    RemoteCache = {},
+    SavedLocations = {},
+    ExpandedObjects = {}, 
+    BlinkDelay = 0.1,          
+    ForceZeroHold = true,
+    UIActive = true,
+    UIVisible = true,
+    SidebarOpen = true,
+    SelectedTargetName = "",
+    ToggleKey = "Home",
+    TeleportMode = "FAST", 
+    TweenSpeed = 160,
+    GlobalESPActive = false,
+    Links = {
+        YouTube = "https://youtube.com/...",
+        Discord = "https://discord.gg/...",
+        Instagram = "https://instagram.com/...",
+        GitHub = "https://github.com/..."
+    }
+}
+
+local function UnloadZenith()
+    ZenithStore.UIActive = false
+    for _, conn in pairs(ZenithStore.Connections) do 
+        if conn and conn.Connected then conn:Disconnect() end 
+    end
+    ZenithStore.Connections = {}
+    if CoreGui:FindFirstChild("DevTools_KMKH_v20") then 
+        CoreGui.DevTools_KMKH_v20:Destroy() 
+    end
+end
+
+if CoreGui:FindFirstChild("DevTools_KMKH_v20") then 
+    CoreGui["DevTools_KMKH_v20"]:Destroy() 
+end
+
+-- Premium UI Color Theme
+local Theme = {
+    Background = Color3.fromRGB(13, 14, 18),
+    Secondary = Color3.fromRGB(20, 21, 27),
+    Accent = Color3.fromRGB(0, 150, 255),
+    Success = Color3.fromRGB(0, 210, 106),
+    Purple = Color3.fromRGB(155, 38, 182),
+    Cyan = Color3.fromRGB(0, 200, 200),
+    Yellow = Color3.fromRGB(245, 190, 20),
+    Orange = Color3.fromRGB(240, 90, 10),
+    Text = Color3.fromRGB(250, 250, 255),
+    TextDim = Color3.fromRGB(150, 152, 165),
+    Border = Color3.fromRGB(40, 42, 54),
+    Alert = Color3.fromRGB(220, 50, 50),
+    
+    -- Hierarchy Specific Colors
+    FolderColor = Color3.fromRGB(240, 190, 70),
+    ModelColor = Color3.fromRGB(235, 90, 90),
+    PartColor = Color3.fromRGB(90, 180, 255),
+    MeshColor = Color3.fromRGB(180, 100, 255)
+}
+
+local UI = {}
+function UI:ApplyDesign(obj, radius)
+    local Corner = Instance.new("UICorner") 
+    Corner.CornerRadius = UDim.new(0, radius or 6) 
+    Corner.Parent = obj
+    
+    local Stroke = Instance.new("UIStroke") 
+    Stroke.Color = Theme.Border 
+    Stroke.Thickness = 1.2
+    Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border 
+    Stroke.Parent = obj
+end
+
+-- Screen Hierarchy setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DevTools_KMKH_v20"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- Safety Disclaimer Window
+local DisclaimerFrame = Instance.new("Frame")
+DisclaimerFrame.Size = UDim2.new(0, 360, 0, 220)
+DisclaimerFrame.Position = UDim2.new(0.5, -180, 0.5, -110)
+DisclaimerFrame.BackgroundColor3 = Theme.Background
+DisclaimerFrame.BackgroundTransparency = 1
+DisclaimerFrame.Active = true
+DisclaimerFrame.Visible = true
+DisclaimerFrame.ZIndex = 10
+DisclaimerFrame.Parent = ScreenGui
+UI:ApplyDesign(DisclaimerFrame, 8)
+DisclaimerFrame.UIStroke.Transparency = 1
+
+local DiscTitle = Instance.new("TextLabel")
+DiscTitle.Size = UDim2.new(1, 0, 0, 45)
+DiscTitle.BackgroundTransparency = 1
+DiscTitle.Text = "SAFETY DISCLAIMER"
+DiscTitle.TextColor3 = Theme.Alert
+DiscTitle.Font = Enum.Font.GothamBold
+DiscTitle.TextSize = 14
+DiscTitle.TextTransparency = 1
+DiscTitle.ZIndex = 10
+DiscTitle.Parent = DisclaimerFrame
+
+local DiscMsg = Instance.new("TextLabel")
+DiscMsg.Size = UDim2.new(1, -30, 1, -105)
+DiscMsg.Position = UDim2.new(0, 15, 0, 45)
+DiscMsg.BackgroundTransparency = 1
+DiscMsg.Text = "You are fully responsible for any account actions or bans from this game or Roblox. Please use this script carefully.\n\nThank you for choosing DevTools K.M.KH!"
+DiscMsg.TextColor3 = Theme.Text
+DiscMsg.Font = Enum.Font.GothamSemibold
+DiscMsg.TextSize = 11
+DiscMsg.TextWrapped = true
+DiscMsg.TextTransparency = 1
+DiscMsg.ZIndex = 10
+DiscMsg.Parent = DisclaimerFrame
+
+local DiscBtn = Instance.new("TextButton")
+DiscBtn.Size = UDim2.new(1, -40, 0, 35)
+DiscBtn.Position = UDim2.new(0, 20, 1, -50)
+DiscBtn.BackgroundColor3 = Theme.Success
+DiscBtn.Text = "I UNDERSTAND"
+DiscBtn.TextColor3 = Theme.Text
+DiscBtn.Font = Enum.Font.GothamBold
+DiscBtn.TextSize = 12
+DiscBtn.BackgroundTransparency = 1
+DiscBtn.TextTransparency = 1
+DiscBtn.ZIndex = 10
+DiscBtn.Parent = DisclaimerFrame
+UI:ApplyDesign(DiscBtn, 6)
+DiscBtn.UIStroke.Transparency = 1
+
+-- Main Interface Controller
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 400, 0, 560)
+MainFrame.Position = UDim2.new(1, -420, 0.5, -280)
+MainFrame.BackgroundColor3 = Theme.Background
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+UI:ApplyDesign(MainFrame, 8)
+
+local function CreateDockFrame(height, width)
+    local Frame = Instance.new("Frame")
+    Frame.Size = UDim2.new(0, width or 290, 0, height or 560)
+    Frame.Position = UDim2.new(0, -(width and (width + 15) or 305), 0, 0)
+    Frame.BackgroundColor3 = Theme.Background
+    Frame.Visible = false
+    Frame.Parent = MainFrame
+    UI:ApplyDesign(Frame, 8)
+    return Frame
+end
+
+local SavedFrame = CreateDockFrame(280)
+local SettingsFrame = CreateDockFrame(440) 
+SettingsFrame.Position = UDim2.new(0, -305, 0, 120)
+local ScriptFrame = CreateDockFrame(560, 380) 
+local RemoteFrame = CreateDockFrame(560, 380) 
+local CreditsFrame = CreateDockFrame(400) 
+CreditsFrame.Position = UDim2.new(0, -305, 0, 0)
+local WorkspaceExplorerFrame = CreateDockFrame(560, 380) 
+
+local SavedScroll = Instance.new("ScrollingFrame")
+SavedScroll.Size = UDim2.new(1, -20, 1, -50)
+SavedScroll.Position = UDim2.new(0, 10, 0, 45)
+SavedScroll.BackgroundTransparency = 1
+SavedScroll.ScrollBarThickness = 2
+SavedScroll.Parent = SavedFrame
+local SavedList = Instance.new("UIListLayout")
+SavedList.Padding = UDim.new(0, 6)
+SavedList.Parent = SavedScroll
+
+local function AddTitle(parent, text, color)
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 40)
+    Title.BackgroundTransparency = 1
+    Title.Text = "   " .. text
+    Title.TextColor3 = color
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 14
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    Title.Parent = parent
+end
+
+AddTitle(SavedFrame, "SAVED TARGET LOCATIONS", Theme.Purple)
+AddTitle(SettingsFrame, "SYSTEM CONFIGURATION", Theme.Orange)
+AddTitle(ScriptFrame, "LOCALSCRIPT INSPECTOR", Theme.Cyan)
+AddTitle(RemoteFrame, "REMOTE TRAFFIC NETWORK", Theme.Yellow)
+AddTitle(CreditsFrame, "CORE DEVELOPERS CREDIT", Theme.Accent)
+AddTitle(WorkspaceExplorerFrame, "REAL-TIME WORKSPACE TREE", Theme.Success)
+
+-- Credits Layout Engine
+local CredScroll = Instance.new("ScrollingFrame")
+CredScroll.Size = UDim2.new(1, -20, 1, -50)
+CredScroll.Position = UDim2.new(0, 10, 0, 45)
+CredScroll.BackgroundTransparency = 1
+CredScroll.ScrollBarThickness = 2
+CredScroll.Parent = CreditsFrame
+local CredList = Instance.new("UIListLayout")
+CredList.Padding = UDim.new(0, 4)
+CredList.Parent = CredScroll
+
+local function AddCreditLine(title, name, color, isSmall)
+    local L = Instance.new("TextLabel")
+    L.Size = UDim2.new(1, 0, 0, isSmall and 18 or 26)
+    L.BackgroundTransparency = 1
+    L.Text = "  " .. title .. (name ~= "" and ": " .. name or "")
+    L.TextColor3 = color
+    L.Font = isSmall and Enum.Font.Gotham or Enum.Font.GothamBold
+    L.TextSize = isSmall and 9 or 11
+    L.TextXAlignment = Enum.TextXAlignment.Left
+    L.Parent = CredScroll
+end
+
+AddCreditLine("FRAMEWORK", "DevTools K.M.KH", Theme.Text)
+AddCreditLine("LEAD ARCHITECT", "KAIZEN", Theme.Accent)
+AddCreditLine("CO-DEVELOPER", "ITZVEAL", Theme.Cyan)
+AddCreditLine("SYSTEM ENGINE", "ZENITH", Theme.Success)
+AddCreditLine("----------------------------------------", "", Theme.Border)
+
+local function AddSocialLink(platform, url, color)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, -12, 0, 26)
+    Btn.BackgroundColor3 = Theme.Secondary
+    Btn.Text = "  🔗 " .. platform .. " : " .. url
+    Btn.TextColor3 = color
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 10
+    Btn.TextXAlignment = Enum.TextXAlignment.Left
+    Btn.Parent = CredScroll
+    UI:ApplyDesign(Btn, 4)
+    Btn.MouseButton1Click:Connect(function()
+        if setclipboard then setclipboard(url) end
+    end)
+end
+
+AddSocialLink("YOUTUBE", ZenithStore.Links.YouTube, Theme.Alert)
+AddSocialLink("DISCORD", ZenithStore.Links.Discord, Theme.Accent)
+AddSocialLink("INSTAGRAM", ZenithStore.Links.Instagram, Theme.Purple)
+AddSocialLink("GITHUB", ZenithStore.Links.GitHub, Theme.Text)
+
+AddCreditLine("----------------------------------------", "", Theme.Border)
+AddCreditLine("SYSTEM HISTORIES & CHANGELOGS", "", Theme.Orange)
+AddCreditLine("• v20.0 Hotfix III: Dynamic Tree Node System Included", "", Theme.TextDim, true)
+AddCreditLine("• v20.0 Hotfix II: Integrated Copy Operations", "", Theme.TextDim, true)
+AddCreditLine("• v20.0 Hotfix I: Re-routed Environment Explorer", "", Theme.TextDim, true)
+
+-- Settings Components Setup
+local ToggleEngineBtn = Instance.new("TextButton")
+ToggleEngineBtn.Size = UDim2.new(1, -28, 0, 32)
+ToggleEngineBtn.Position = UDim2.new(0, 14, 0, 45)
+ToggleEngineBtn.BackgroundColor3 = Theme.Accent
+ToggleEngineBtn.Text = "TELEPORT ENGINE: FAST"
+ToggleEngineBtn.TextColor3 = Theme.Text
+ToggleEngineBtn.Font = Enum.Font.GothamBold
+ToggleEngineBtn.TextSize = 11
+ToggleEngineBtn.Parent = SettingsFrame
+UI:ApplyDesign(ToggleEngineBtn, 5)
+
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Size = UDim2.new(1, -20, 0, 18)
+SpeedLabel.Position = UDim2.new(0, 14, 0, 85)
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.Text = "TWEEN PROPULSION SPEED (STUDS/SEC)"
+SpeedLabel.TextColor3 = Theme.Cyan
+SpeedLabel.Font = Enum.Font.GothamBold
+SpeedLabel.TextSize = 9
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpeedLabel.Parent = SettingsFrame
+
+local SpeedInput = Instance.new("TextBox")
+SpeedInput.Size = UDim2.new(0.9, 0, 0, 26)
+SpeedInput.Position = UDim2.new(0, 14, 0, 105)
+SpeedInput.BackgroundColor3 = Theme.Secondary
+SpeedInput.Text = tostring(ZenithStore.TweenSpeed)
+SpeedInput.TextColor3 = Theme.Text
+SpeedInput.Font = Enum.Font.GothamBold
+SpeedInput.TextSize = 11
+SpeedInput.Parent = SettingsFrame
+UI:ApplyDesign(SpeedInput, 4)
+
+local Desc1 = Instance.new("TextLabel")
+Desc1.Size = UDim2.new(1, -20, 0, 18)
+Desc1.Position = UDim2.new(0, 14, 0, 140)
+Desc1.BackgroundTransparency = 1
+Desc1.Text = "PROXIMITY BLINK HOLD DELAY (SEC)"
+Desc1.TextColor3 = Theme.Purple
+Desc1.Font = Enum.Font.GothamBold
+Desc1.TextSize = 9
+Desc1.TextXAlignment = Enum.TextXAlignment.Left
+Desc1.Parent = SettingsFrame
+
+local BlinkTimeInput = Instance.new("TextBox")
+BlinkTimeInput.Size = UDim2.new(0.9, 0, 0, 26)
+BlinkTimeInput.Position = UDim2.new(0, 14, 0, 160)
+BlinkTimeInput.BackgroundColor3 = Theme.Secondary
+BlinkTimeInput.Text = tostring(ZenithStore.BlinkDelay)
+BlinkTimeInput.TextColor3 = Theme.Text
+BlinkTimeInput.Font = Enum.Font.Gotham
+BlinkTimeInput.TextSize = 11
+BlinkTimeInput.Parent = SettingsFrame
+UI:ApplyDesign(BlinkTimeInput, 4)
+
+local ZeroHoldBtn = Instance.new("TextButton")
+ZeroHoldBtn.Size = UDim2.new(1, -28, 0, 32)
+ZeroHoldBtn.Position = UDim2.new(0, 14, 0, 195)
+ZeroHoldBtn.BackgroundColor3 = Theme.Success
+ZeroHoldBtn.Text = "FORCE INSTANT AUTOMATION HOLD: ON"
+ZeroHoldBtn.TextColor3 = Theme.Text
+ZeroHoldBtn.Font = Enum.Font.GothamBold
+ZeroHoldBtn.TextSize = 10
+ZeroHoldBtn.Parent = SettingsFrame
+UI:ApplyDesign(ZeroHoldBtn, 5)
+
+local BindLabel = Instance.new("TextLabel")
+BindLabel.Size = UDim2.new(1, -20, 0, 18)
+BindLabel.Position = UDim2.new(0, 14, 0, 235)
+BindLabel.BackgroundTransparency = 1
+BindLabel.Text = "TOGGLE UI KEYBIND (CLICK TO CHANGE)"
+BindLabel.TextColor3 = Theme.Yellow
+BindLabel.Font = Enum.Font.GothamBold
+BindLabel.TextSize = 9
+BindLabel.TextXAlignment = Enum.TextXAlignment.Left
+BindLabel.Parent = SettingsFrame
+
+local BindBtn = Instance.new("TextButton")
+BindBtn.Size = UDim2.new(0.9, 0, 0, 28)
+BindBtn.Position = UDim2.new(0, 14, 0, 255)
+BindBtn.BackgroundColor3 = Theme.Secondary
+BindBtn.Text = "[ " .. ZenithStore.ToggleKey .. " ]"
+BindBtn.TextColor3 = Theme.Text
+BindBtn.Font = Enum.Font.GothamBold
+BindBtn.TextSize = 11
+BindBtn.Parent = SettingsFrame
+UI:ApplyDesign(BindBtn, 5)
+
+-- Advanced Server Hop Optimization Methods
+local function DynamicServerHop(targetMode)
+    local success, servers = pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+    
+    if success and servers and servers.data then
+        local targetServer = nil
+        local serverList = {}
+        
+        for _, s in ipairs(servers.data) do
+            if s.id ~= game.JobId and tonumber(s.playing) and tonumber(s.maxPlayers) then
+                if s.playing < s.maxPlayers then
+                    table.insert(serverList, s)
+                end
+            end
+        end
+        
+        if targetMode == "HIGHER" then
+            table.sort(serverList, function(a, b) return a.playing > b.playing end)
+        elseif targetMode == "LOWER" then
+            table.sort(serverList, function(a, b) return a.playing < b.playing end)
+        end
+        
+        if #serverList > 0 then
+            targetServer = serverList[1]
+        end
+        
+        if targetServer then
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer.id, LocalPlayer)
+        end
+    end
+end
+
+local HopHighBtn = Instance.new("TextButton")
+HopHighBtn.Size = UDim2.new(1, -28, 0, 32)
+HopHighBtn.Position = UDim2.new(0, 14, 0, 300)
+HopHighBtn.BackgroundColor3 = Theme.Purple
+HopHighBtn.Text = "⚡ HOP TO HIGHER PLAYER SERVER"
+HopHighBtn.TextColor3 = Theme.Text
+HopHighBtn.Font = Enum.Font.GothamBold
+HopHighBtn.TextSize = 11
+HopHighBtn.Parent = SettingsFrame
+UI:ApplyDesign(HopHighBtn, 5)
+
+HopHighBtn.MouseButton1Click:Connect(function()
+    HopHighBtn.Text = "SEARCHING HIGH DENSITY..."
+    DynamicServerHop("HIGHER")
+    task.delay(3, function() HopHighBtn.Text = "⚡ HOP TO HIGHER PLAYER SERVER" end)
+end)
+
+local HopLowBtn = Instance.new("TextButton")
+HopLowBtn.Size = UDim2.new(1, -28, 0, 32)
+HopLowBtn.Position = UDim2.new(0, 14, 0, 340)
+HopLowBtn.BackgroundColor3 = Theme.Secondary
+HopLowBtn.Text = "🍃 HOP TO LOWER PLAYER SERVER"
+HopLowBtn.TextColor3 = Theme.TextDim
+HopLowBtn.Font = Enum.Font.GothamBold
+HopLowBtn.TextSize = 11
+HopLowBtn.Parent = SettingsFrame
+UI:ApplyDesign(HopLowBtn, 5)
+
+HopLowBtn.MouseButton1Click:Connect(function()
+    HopLowBtn.Text = "SEARCHING LOW DENSITY..."
+    DynamicServerHop("LOWER")
+    task.delay(3, function() HopLowBtn.Text = "🍃 HOP TO LOWER PLAYER SERVER" end)
+end)
+
+local IsListeningForKey = false
+BindBtn.MouseButton1Click:Connect(function()
+    IsListeningForKey = true
+    BindBtn.Text = "PRESS ANY KEY..."
+    BindBtn.TextColor3 = Theme.Orange
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if IsListeningForKey and input.UserInputType == Enum.UserInputType.Keyboard then
+        IsListeningForKey = false
+        ZenithStore.ToggleKey = input.KeyCode.Name
+        BindBtn.Text = "[ " .. ZenithStore.ToggleKey .. " ]"
+        BindBtn.TextColor3 = Theme.Text
+    end
+end)
+
+local function BuildConsoleViewWithCopy(parent, accentColor)
+    local ScrScroll = Instance.new("ScrollingFrame")
+    ScrScroll.Size = UDim2.new(1, -20, 1, -115) 
+    ScrScroll.Position = UDim2.new(0, 10, 0, 45)
+    ScrScroll.BackgroundTransparency = 1
+    ScrScroll.ScrollBarThickness = 3
+    ScrScroll.Parent = parent
+    
+    local LLayout = Instance.new("UIListLayout")
+    LLayout.Padding = UDim.new(0, 4)
+    LLayout.Parent = ScrScroll
+
+    local InspectorTray = Instance.new("Frame")
+    InspectorTray.Size = UDim2.new(1, -20, 0, 55)
+    InspectorTray.Position = UDim2.new(0, 10, 1, -65)
+    InspectorTray.BackgroundColor3 = Theme.Secondary
+    InspectorTray.Parent = parent
+    UI:ApplyDesign(InspectorTray, 6)
+
+    local TargetOutputText = Instance.new("TextBox")
+    TargetOutputText.Size = UDim2.new(0.72, 0, 1, -12)
+    TargetOutputText.Position = UDim2.new(0, 6, 0, 6)
+    TargetOutputText.BackgroundColor3 = Theme.Background
+    TargetOutputText.ClearTextOnFocus = false
+    TargetOutputText.Text = "No data loaded."
+    TargetOutputText.TextColor3 = Theme.TextDim
+    TargetOutputText.Font = Enum.Font.GothamSemibold
+    TargetOutputText.TextSize = 10
+    TargetOutputText.Parent = InspectorTray
+    UI:ApplyDesign(TargetOutputText, 4)
+
+    local CopyBtn = Instance.new("TextButton")
+    CopyBtn.Size = UDim2.new(0.24, 0, 1, -12)
+    CopyBtn.Position = UDim2.new(0.76, 0, 0, 6)
+    CopyBtn.BackgroundColor3 = accentColor
+    CopyBtn.Text = "COPY"
+    CopyBtn.TextColor3 = Theme.Text
+    CopyBtn.Font = Enum.Font.GothamBold
+    CopyBtn.TextSize = 10
+    CopyBtn.Parent = InspectorTray
+    UI:ApplyDesign(CopyBtn, 4)
+
+    CopyBtn.MouseButton1Click:Connect(function()
+        if TargetOutputText.Text ~= "No data loaded." and TargetOutputText.Text ~= "" then
+            if setclipboard then setclipboard(TargetOutputText.Text) end
+            CopyBtn.Text = "COPIED!"
+            CopyBtn.BackgroundColor3 = Theme.Success
+            task.delay(1, function()
+                CopyBtn.Text = "COPY"
+                CopyBtn.BackgroundColor3 = accentColor
+            end)
+        end
+    end)
+    return ScrScroll, TargetOutputText
+end
+
+local ScriptScroll, ScriptTrayText = BuildConsoleViewWithCopy(ScriptFrame, Theme.Cyan)
+local RemoteScroll, RemoteTrayText = BuildConsoleViewWithCopy(RemoteFrame, Theme.Yellow)
+
+-- Real-Time Workspace Explorer Configuration Components
+local WorkspaceSearchBar = Instance.new("TextBox")
+WorkspaceSearchBar.Size = UDim2.new(1, -20, 0, 36)
+WorkspaceSearchBar.Position = UDim2.new(0, 10, 0, 45)
+WorkspaceSearchBar.BackgroundColor3 = Theme.Secondary
+WorkspaceSearchBar.PlaceholderText = "Filter Hierarchy Name..."
+WorkspaceSearchBar.Text = ""
+WorkspaceSearchBar.TextColor3 = Theme.Text
+WorkspaceSearchBar.Font = Enum.Font.GothamBold
+WorkspaceSearchBar.TextSize = 11
+WorkspaceSearchBar.Parent = WorkspaceExplorerFrame
+UI:ApplyDesign(WorkspaceSearchBar, 5)
+
+local WorkspaceScroll = Instance.new("ScrollingFrame")
+WorkspaceScroll.Size = UDim2.new(1, -20, 1, -100)
+WorkspaceScroll.Position = UDim2.new(0, 10, 0, 90)
+WorkspaceScroll.BackgroundTransparency = 1
+WorkspaceScroll.ScrollBarThickness = 3
+WorkspaceScroll.Parent = WorkspaceExplorerFrame
+local WorkspaceLayout = Instance.new("UIListLayout")
+WorkspaceLayout.Padding = UDim.new(0, 2)
+WorkspaceLayout.Parent = WorkspaceScroll
+
+-- Main Frame Headers & Sub-mechanisms
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -90, 0, 50)
+TitleLabel.Position = UDim2.new(0, 16, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "DEVTOOLS K.M.KH v20.0"
+TitleLabel.TextColor3 = Theme.Accent
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 16
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = MainFrame
+
+local SlideBtn = Instance.new("TextButton")
+SlideBtn.Size = UDim2.new(0, 32, 0, 32)
+SlideBtn.Position = UDim2.new(1, -80, 0, 9)
+SlideBtn.BackgroundColor3 = Theme.Secondary
+SlideBtn.Text = "▶"
+SlideBtn.TextColor3 = Theme.Text
+SlideBtn.Font = Enum.Font.GothamBold
+SlideBtn.Parent = MainFrame
+UI:ApplyDesign(SlideBtn, 6)
+
+local UnloadBtn = Instance.new("TextButton")
+UnloadBtn.Size = UDim2.new(0, 32, 0, 32)
+UnloadBtn.Position = UDim2.new(1, -42, 0, 9)
+UnloadBtn.BackgroundColor3 = Theme.Alert
+UnloadBtn.Text = "❌"
+UnloadBtn.TextColor3 = Theme.Text
+UnloadBtn.Font = Enum.Font.GothamBold
+UnloadBtn.Parent = MainFrame
+UI:ApplyDesign(UnloadBtn, 6)
+UnloadBtn.MouseButton1Click:Connect(UnloadZenith)
+
+local SearchBar = Instance.new("TextBox")
+SearchBar.Size = UDim2.new(1, -24, 0, 40)
+SearchBar.Position = UDim2.new(0, 12, 0, 55)
+SearchBar.BackgroundColor3 = Theme.Secondary
+SearchBar.PlaceholderText = "Search active vectors (Lag-Free Matrix)..."
+SearchBar.Text = ""
+SearchBar.TextColor3 = Theme.Text
+SearchBar.Font = Enum.Font.GothamBold
+SearchBar.TextSize = 13
+SearchBar.Parent = MainFrame
+UI:ApplyDesign(SearchBar, 6)
+
+local ObjectsScroll = Instance.new("ScrollingFrame")
+ObjectsScroll.Size = UDim2.new(1, -24, 0, 255)
+ObjectsScroll.Position = UDim2.new(0, 12, 0, 105)
+ObjectsScroll.BackgroundTransparency = 1
+ObjectsScroll.ScrollBarThickness = 4
+ObjectsScroll.Parent = MainFrame
+
+local ObjectListLayout = Instance.new("UIListLayout")
+ObjectListLayout.Padding = UDim.new(0, 6)
+ObjectListLayout.Parent = ObjectsScroll
+
+-- Teleport Engine Panels
+local TPSection = Instance.new("Frame")
+TPSection.Size = UDim2.new(1, -24, 0, 165)
+TPSection.Position = UDim2.new(0, 12, 1, -180)
+TPSection.BackgroundColor3 = Theme.Secondary
+TPSection.Parent = MainFrame
+UI:ApplyDesign(TPSection, 6)
+
+local TPTargetBox = Instance.new("TextBox")
+TPTargetBox.Size = UDim2.new(1, -20, 0, 35)
+TPTargetBox.Position = UDim2.new(0, 10, 0, 10)
+TPTargetBox.BackgroundColor3 = Theme.Background
+TPTargetBox.PlaceholderText = "Target Workspace Identifier..."
+TPTargetBox.Text = ""
+TPTargetBox.TextColor3 = Theme.Text
+TPTargetBox.ClearTextOnFocus = false
+TPTargetBox.Font = Enum.Font.GothamBold
+TPTargetBox.TextSize = 12
+TPTargetBox.Parent = TPSection
+UI:ApplyDesign(TPTargetBox, 4)
+
+local TabContainer = Instance.new("Frame")
+TabContainer.Size = UDim2.new(1, -16, 0, 34)
+TabContainer.Position = UDim2.new(0, 8, 0, 55)
+TabContainer.BackgroundTransparency = 1
+TabContainer.Parent = TPSection
+
+local TabListLayout = Instance.new("UIListLayout")
+TabListLayout.FillDirection = Enum.FillDirection.Horizontal
+TabListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TabListLayout.Padding = UDim.new(0, 3) 
+TabListLayout.Parent = TabContainer
+
+local function CreateEquidistantTab(text, color, order)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0.138, 0, 1, 0) 
+    Btn.BackgroundColor3 = Theme.Background
+    Btn.Text = text
+    Btn.TextColor3 = color
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 7
+    Btn.LayoutOrder = order
+    Btn.Parent = TabContainer
+    UI:ApplyDesign(Btn, 4)
+    return Btn
+end
+
+local SavedHubBtn = CreateEquidistantTab("SAVED", Theme.Purple, 1)
+local GlobalESPBtn = CreateEquidistantTab("ESP", Theme.Text, 2)
+local SettingsToggleBtn = CreateEquidistantTab("SETT", Theme.Orange, 3)
+local ScriptHubBtn = CreateEquidistantTab("SCRP", Theme.Cyan, 4)
+local RemoteHubBtn = CreateEquidistantTab("RMOT", Theme.Yellow, 5)
+local WorkspaceHubBtn = CreateEquidistantTab("WSPC", Theme.Success, 6) 
+local CreditsHubBtn = CreateEquidistantTab("CRED", Theme.Accent, 7)
+
+local ExecuteTPBtn = Instance.new("TextButton")
+ExecuteTPBtn.Size = UDim2.new(0.68, 0, 0, 45)
+ExecuteTPBtn.Position = UDim2.new(0, 8, 0, 105)
+ExecuteTPBtn.BackgroundColor3 = Theme.Success
+ExecuteTPBtn.Text = "STANDARD CFrame TP"
+ExecuteTPBtn.TextColor3 = Theme.Text
+ExecuteTPBtn.Font = Enum.Font.GothamBold
+ExecuteTPBtn.TextSize = 13
+ExecuteTPBtn.Parent = TPSection
+UI:ApplyDesign(ExecuteTPBtn, 6)
+
+local SaveTargetBtn = Instance.new("TextButton")
+SaveTargetBtn.Size = UDim2.new(0.26, 0, 0, 45)
+SaveTargetBtn.Position = UDim2.new(0.68, 14, 0, 105)
+SaveTargetBtn.BackgroundColor3 = Theme.Purple
+SaveTargetBtn.Text = "SAVE"
+SaveTargetBtn.TextColor3 = Theme.Text
+SaveTargetBtn.Font = Enum.Font.GothamBold
+SaveTargetBtn.TextSize = 13
+SaveTargetBtn.Parent = TPSection
+UI:ApplyDesign(SaveTargetBtn, 6)
+
+-- ESP Hover Engines
+local CurrentHoverHighlight = Instance.new("Highlight")
+CurrentHoverHighlight.Name = "ZenithHoverESP"
+CurrentHoverHighlight.FillColor = Color3.fromRGB(0, 120, 255)
+CurrentHoverHighlight.FillTransparency = 0.5
+CurrentHoverHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+CurrentHoverHighlight.OutlineTransparency = 0.1
+CurrentHoverHighlight.Adornee = nil
+CurrentHoverHighlight.Parent = ScreenGui
+
+local HoverBillboard = Instance.new("BillboardGui")
+HoverBillboard.Name = "ZenithHoverLabel"
+HoverBillboard.Size = UDim2.new(0, 200, 0, 30)
+HoverBillboard.AlwaysOnTop = true
+HoverBillboard.ExtentsOffset = Vector3.new(0, 3, 0)
+HoverBillboard.Enabled = false
+HoverBillboard.Parent = ScreenGui
+
+local HoverLabel = Instance.new("TextLabel")
+HoverLabel.Size = UDim2.new(1, 0, 1, 0)
+HoverLabel.BackgroundTransparency = 1
+HoverLabel.TextColor3 = Theme.Text
+HoverLabel.Font = Enum.Font.GothamBold
+HoverLabel.TextSize = 12
+HoverLabel.TextStrokeTransparency = 0.2
+HoverLabel.Parent = HoverBillboard
+
+local lastTarget = nil
+local MouseMoveConn = Mouse.Move:Connect(function()
+    if not ZenithStore.GlobalESPActive or not ZenithStore.UIActive then 
+        CurrentHoverHighlight.Adornee = nil
+        HoverBillboard.Enabled = false
+        return 
+    end
+    local target = Mouse.Target
+    if target and target:IsA("BasePart") and not target:IsDescendantOf(LocalPlayer.Character) then
+        if target ~= lastTarget then
+            lastTarget = target
+            CurrentHoverHighlight.Adornee = target
+            HoverLabel.Text = target.Name
+            HoverBillboard.Adornee = target
+            HoverBillboard.Enabled = true
+        end
+    else
+        lastTarget = nil
+        CurrentHoverHighlight.Adornee = nil
+        HoverBillboard.Enabled = false
+    end
+end)
+table.insert(ZenithStore.Connections, MouseMoveConn)
+
+local MouseClickConn = Mouse.Button1Down:Connect(function()
+    if ZenithStore.GlobalESPActive and Mouse.Target and Mouse.Target:IsA("BasePart") and not Mouse.Target:IsDescendantOf(LocalPlayer.Character) then
+        local name = Mouse.Target.Name
+        TPTargetBox.Text = name
+        ZenithStore.SelectedTargetName = name
+    end
+end)
+table.insert(ZenithStore.Connections, MouseClickConn)
+
+-- Core Indexing & Engine Teleport Controllers
+local RenderMapCollection, RefreshScriptsUI, RefreshRemotesUI, RenderRealtimeTree
+
+local function SegmentedScanning(root, callback)
+    if not root then return end
+    local items = root:GetDescendants()
+    for i = 1, #items do
+        if not ZenithStore.UIActive then break end
+        callback(items[i])
+        if i % 300 == 0 then task.wait() end 
+    end
+end
+
+local function MasterEngineRefreshIndex()
+    local tempMap, tempScr, tempRem = {}, {}, {}
+    
+    SegmentedScanning(workspace, function(item)
+        if item:IsA("BasePart") or item:IsA("Model") then
+            if item.Name ~= "Terrain" and not item:IsDescendantOf(LocalPlayer.Character) then
+                table.insert(tempMap, item)
+            end
+        end
+    end)
+    
+    SegmentedScanning(game:GetService("Players"), function(item)
+        if item:IsA("LocalScript") or item:IsA("ModuleScript") then
+            table.insert(tempScr, item)
+        end
+    end)
+
+    SegmentedScanning(ReplicatedStorage, function(item)
+        if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
+            table.insert(tempRem, item)
+        elseif item:IsA("LocalScript") or item:IsA("ModuleScript") then
+            table.insert(tempScr, item)
+        end
+    end)
+
+    for _, svcName in ipairs({"StarterGui", "StarterPack", "StarterPlayer"}) do
+        local ok, svc = pcall(game.GetService, game, svcName)
+        if ok and svc then
+            SegmentedScanning(svc, function(item)
+                if item:IsA("LocalScript") or item:IsA("ModuleScript") then
+                    table.insert(tempScr, item)
+                end
+            end)
+        end
+    end
+
+    ZenithStore.MapCache = tempMap
+    ZenithStore.ScriptCache = tempScr
+    ZenithStore.RemoteCache = tempRem
+    
+    task.spawn(function()
+        RenderMapCollection()
+        RefreshScriptsUI()
+        RefreshRemotesUI()
+    end)
+end
+
+task.spawn(function()
+    while ZenithStore.UIActive do
+        pcall(MasterEngineRefreshIndex)
+        task.wait(6)
+    end
+end)
+
+-- Highly Optimized Anti-Cheat Bypass Teleportation Engine
+local function ExecuteAdvancedPropulsion(targetCF)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChildOfClass("Humanoid") then return end
+    local hrp = char.HumanoidRootPart
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    
+    if LocalPlayer.MaximumSimulationRadius then
+        pcall(function() LocalPlayer.SimulationRadius = 1e5 end)
+    end
+    
+    -- Anti-Falling Shield Setup
+    local velocityShield = hrp.AssemblyLinearVelocity
+    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    
+    if ZenithStore.TeleportMode == "FAST" then
+        -- Fast Matrix CFrame Jumper with Velocity Zeroing to prevent tracking bans
+        hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+        task.wait(0.02)
+        hrp.CFrame = targetCF
+        task.wait(0.02)
+        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+    elseif ZenithStore.TeleportMode == "TWEEN" then
+        -- Adaptive Smooth Tween Engine with structural Noclip
+        local distance = (hrp.Position - targetCF.Position).Magnitude
+        local calculatedDuration = distance / ZenithStore.TweenSpeed
+        
+        local NoclipLoop = RunService.Stepped:Connect(function()
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+            end
+        end)
+        
+        hum:ChangeState(Enum.HumanoidStateType.Climbing)
+        local tweenInfo = TweenInfo.new(calculatedDuration, Enum.EasingStyle.Linear)
+        local twin = TweenService:Create(hrp, tweenInfo, {CFrame = targetCF})
+        twin:Play()
+        twin.Completed:Wait()
+        
+        NoclipLoop:Disconnect()
+        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+    end
+    
+    task.delay(0.1, function()
+        if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
+    end)
+end
+
+local function GetTargetInstance(targetName)
+    local currentTarget = targetName or ZenithStore.SelectedTargetName
+    if currentTarget == "" then return nil end
+    local found = workspace:FindFirstChild(currentTarget, true)
+    if found then return found end
+    for _, obj in ipairs(ZenithStore.MapCache) do
+        if obj and obj.Name == currentTarget then return obj end
+    end
+    return nil
+end
+
+ExecuteTPBtn.MouseButton1Click:Connect(function()
+    local targ = GetTargetInstance()
+    if targ then
+        local cf = targ:IsA("BasePart") and targ.CFrame or targ:GetPivot()
+        ExecuteAdvancedPropulsion(cf)
+    end
+end)
+
+local function BlinkTriggerProximity(object)
+    local prompt = object:FindFirstChildOfClass("ProximityPrompt") or object:FindFirstChild("ProximityPrompt", true)
+    local char = LocalPlayer.Character
+    if not prompt or not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart; local originalCFrame = hrp.CFrame; local oldHold = prompt.HoldDuration
+    if ZenithStore.ForceZeroHold then prompt.HoldDuration = 0 end
+    
+    hrp.CFrame = (object:IsA("BasePart") and object.CFrame or object:GetPivot())
+    task.wait(0.01)
+    prompt:InputHoldBegin() task.wait(ZenithStore.BlinkDelay) prompt:InputHoldEnd()
+    prompt.HoldDuration = oldHold; hrp.CFrame = originalCFrame
+end
+
+local function RefreshSavedUI()
+    for _, child in ipairs(SavedScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+    local count = 0
+    for _, name in ipairs(ZenithStore.SavedLocations) do
+        count = count + 1
+        local Item = Instance.new("TextButton")
+        Item.Size = UDim2.new(1, -6, 0, 32)
+        Item.BackgroundColor3 = Theme.Secondary
+        Item.Text = "  📍 " .. name
+        Item.TextColor3 = Theme.Text
+        Item.Font = Enum.Font.GothamBold
+        Item.TextSize = 11
+        Item.TextXAlignment = Enum.TextXAlignment.Left
+        Item.Parent = SavedScroll
+        UI:ApplyDesign(Item, 5)
+        
+        Item.MouseButton1Click:Connect(function()
+            local targ = GetTargetInstance(name)
+            if targ then
+                local cf = targ:IsA("BasePart") and targ.CFrame or targ:GetPivot()
+                ExecuteAdvancedPropulsion(cf)
+            end
+        end)
+    end
+    SavedScroll.CanvasSize = UDim2.new(0, 0, 0, count * 38)
+end
+
+SaveTargetBtn.MouseButton1Click:Connect(function()
+    if ZenithStore.SelectedTargetName ~= "" and not table.find(ZenithStore.SavedLocations, ZenithStore.SelectedTargetName) then
+        table.insert(ZenithStore.SavedLocations, ZenithStore.SelectedTargetName)
+        RefreshSavedUI()
+    end
+end)
+
+RefreshScriptsUI = function()
+    for _, child in ipairs(ScriptScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+    local count = 0
+    for _, scr in ipairs(ZenithStore.ScriptCache) do
+        if scr and pcall(function() return scr.Parent end) and scr.Parent then
+            count = count + 1; if count > 60 then break end
+            local Item = Instance.new("TextButton")
+            Item.Size = UDim2.new(1, -6, 0, 28)
+            Item.BackgroundColor3 = Theme.Secondary
+            Item.Text = "  📜 [" .. scr.ClassName .. "] " .. scr.Name
+            Item.TextColor3 = Theme.Cyan
+            Item.Font = Enum.Font.GothamBold
+            Item.TextSize = 10
+            Item.TextXAlignment = Enum.TextXAlignment.Left
+            Item.Parent = ScriptScroll
+            UI:ApplyDesign(Item, 4)
+            
+            Item.MouseButton1Click:Connect(function()
+                TPTargetBox.Text = scr.Name
+                ZenithStore.SelectedTargetName = scr.Name
+                ScriptTrayText.Text = scr:GetFullName()
+                ScriptTrayText.TextColor3 = Theme.Text
+            end)
+        end
+    end
+    ScriptScroll.CanvasSize = UDim2.new(0, 0, 0, count * 32)
+end
+
+RefreshRemotesUI = function()
+    for _, child in ipairs(RemoteScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+    local count = 0
+    for _, rem in ipairs(ZenithStore.RemoteCache) do
+        if rem and pcall(function() return rem.Parent end) and rem.Parent then
+            count = count + 1; if count > 60 then break end
+            local Item = Instance.new("TextButton")
+            Item.Size = UDim2.new(1, -6, 0, 28)
+            Item.BackgroundColor3 = Theme.Secondary
+            Item.Text = "  📡 [" .. rem.ClassName .. "] " .. rem.Name
+            Item.TextColor3 = Theme.Yellow
+            Item.Font = Enum.Font.GothamBold
+            Item.TextSize = 10
+            Item.TextXAlignment = Enum.TextXAlignment.Left
+            Item.Parent = RemoteScroll
+            UI:ApplyDesign(Item, 4)
+            
+            Item.MouseButton1Click:Connect(function()
+                TPTargetBox.Text = rem.Name
+                ZenithStore.SelectedTargetName = rem.Name
+                RemoteTrayText.Text = rem:GetFullName()
+                RemoteTrayText.TextColor3 = Theme.Text
+            end)
+        end
+    end
+    RemoteScroll.CanvasSize = UDim2.new(0, 0, 0, count * 32)
+end
+
+-- Real-Time Workspace Tree Node Engine with Instance Detection & Instanced Teleport
+local totalTreeLines = 0
+local treeFilterText = ""
+
+local function TraverseAndRenderNode(object, depth)
+    if totalTreeLines > 150 then return end 
+    if object == LocalPlayer.Character then return end
+
+    local name = object.Name
+    if treeFilterText ~= "" and not string.find(name:lower(), treeFilterText, 1, true) then
+        local children = object:GetChildren()
+        for i = 1, #children do TraverseAndRenderNode(children[i], depth) end
+        return
+    end
+
+    totalTreeLines = totalTreeLines + 1
+
+    local NodeButton = Instance.new("TextButton")
+    NodeButton.Size = UDim2.new(1, -6, 0, 24)
+    NodeButton.BackgroundTransparency = 1
+    
+    local indent = string.rep("    ", depth)
+    local prefix = "🔹 "
+    local typeColor = Theme.PartColor
+    local isContainer = false
+
+    if object:IsA("Folder") then
+        isContainer = true
+        local expanded = ZenithStore.ExpandedObjects[object]
+        prefix = expanded and "🔽 📂 [Folder] " or "▶️ 📁 [Folder] "
+        typeColor = Theme.FolderColor
+    elseif object:IsA("Model") then
+        isContainer = true
+        local expanded = ZenithStore.ExpandedObjects[object]
+        prefix = expanded and "🔽 📦 [Model] " or "▶️ 📦 [Model] "
+        typeColor = Theme.ModelColor
+    elseif object:IsA("MeshPart") then
+        prefix = "🔮 [Mesh] "
+        typeColor = Theme.MeshColor
+    elseif object:IsA("BasePart") then
+        prefix = "🧱 [Part] "
+        typeColor = Theme.PartColor
+    else
+        prefix = "⚙️ [" .. object.ClassName .. "] "
+        typeColor = Theme.TextDim
+    end
+
+    NodeButton.Text = indent .. prefix .. name
+    NodeButton.TextColor3 = typeColor
+    NodeButton.Font = Enum.Font.GothamSemibold
+    NodeButton.TextSize = 10
+    NodeButton.TextXAlignment = Enum.TextXAlignment.Left
+    NodeButton.Parent = WorkspaceScroll
+
+    NodeButton.MouseButton1Click:Connect(function()
+        if isContainer then
+            ZenithStore.ExpandedObjects[object] = not ZenithStore.ExpandedObjects[object]
+            RenderRealtimeTree()
+        else
+            TPTargetBox.Text = name
+            ZenithStore.SelectedTargetName = name
+            
+            NodeButton.TextColor3 = Theme.Success
+            task.delay(0.4, function() NodeButton.TextColor3 = typeColor end)
+            
+            if object:IsA("BasePart") then
+                ExecuteAdvancedPropulsion(object.CFrame)
+            elseif object:IsA("Model") then
+                ExecuteAdvancedPropulsion(object:GetPivot())
+            end
+        end
+    end)
+
+    if isContainer and (ZenithStore.ExpandedObjects[object] or treeFilterText ~= "") then
+        local children = object:GetChildren()
+        for i = 1, #children do
+            TraverseAndRenderNode(children[i], depth + 1)
+        end
+    end
+end
+
+RenderRealtimeTree = function()
+    for _, child in ipairs(WorkspaceScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+    totalTreeLines = 0
+    treeFilterText = WorkspaceSearchBar.Text:lower()
+
+    local topLevel = workspace:GetChildren()
+    for i = 1, #topLevel do
+        if topLevel[i].Name ~= "Terrain" then
+            TraverseAndRenderNode(topLevel[i], 0)
+        end
+    end
+    WorkspaceScroll.CanvasSize = UDim2.new(0, 0, 0, totalTreeLines * 26)
+end
+
+local searchToken = 0
+RenderMapCollection = function()
+    searchToken = searchToken + 1; local currentToken = searchToken
+    for _, child in ipairs(ObjectsScroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+    local txt = SearchBar.Text:lower() 
+    local count = 0
+    
+    for _, obj in ipairs(ZenithStore.MapCache) do
+        if currentToken ~= searchToken then return end
+        if obj and pcall(function() return obj.Parent end) and obj.Parent then
+            local name = obj.Name
+            if txt == "" or string.sub(name:lower(), 1, string.len(txt)) == txt then
+                count = count + 1; if count > 45 then break end
+                
+                local frame = Instance.new("Frame") 
+                frame.Size = UDim2.new(1, -6, 0, 34) 
+                frame.BackgroundTransparency = 1
+                frame.Parent = ObjectsScroll
+                
+                local successPrompt, promptObj = pcall(function() 
+                    return obj:FindFirstChildOfClass("ProximityPrompt") or obj:FindFirstChild("ProximityPrompt", true) 
+                end)
+                local hasPrompt = successPrompt and promptObj
+                
+                local btn = Instance.new("TextButton")
+                if hasPrompt then btn.Size = UDim2.new(0.72, 0, 1, 0) else btn.Size = UDim2.new(1, 0, 1, 0) end
+                btn.BackgroundColor3 = Theme.Secondary
+                btn.Text = "  [" .. obj.ClassName .. "] " .. name
+                btn.TextColor3 = Theme.Text
+                btn.Font = Enum.Font.GothamBold
+                btn.TextSize = 11
+                btn.TextXAlignment = Enum.TextXAlignment.Left
+                btn.Parent = frame
+                UI:ApplyDesign(btn, 5)
+                
+                btn.MouseButton1Click:Connect(function() 
+                    TPTargetBox.Text = name
+                    ZenithStore.SelectedTargetName = name 
+                end)
+                
+                if hasPrompt then
+                    local pBtn = Instance.new("TextButton")
+                    pBtn.Size = UDim2.new(0.24, 0, 1, 0)
+                    pBtn.Position = UDim2.new(0.76, 0, 0, 0)
+                    pBtn.BackgroundColor3 = Theme.Purple
+                    pBtn.Text = "BLINK"
+                    pBtn.TextColor3 = Theme.Text
+                    pBtn.Font = Enum.Font.GothamBold
+                    pBtn.TextSize = 9
+                    pBtn.Parent = frame
+                    UI:ApplyDesign(pBtn, 5)
+                    pBtn.MouseButton1Click:Connect(function() BlinkTriggerProximity(obj) end)
+                end
+            end
+        end
+    end
+    ObjectsScroll.CanvasSize = UDim2.new(0, 0, 0, count * 40)
+end
+
+local function ToggleDockFrame(targetFrame)
+    local state = targetFrame and targetFrame.Visible or false
+    SavedFrame.Visible = false
+    SettingsFrame.Visible = false
+    ScriptFrame.Visible = false
+    RemoteFrame.Visible = false
+    CreditsFrame.Visible = false
+    WorkspaceExplorerFrame.Visible = false
+    if targetFrame then targetFrame.Visible = not state end
+end
+
+SavedHubBtn.MouseButton1Click:Connect(function() ToggleDockFrame(SavedFrame) if SavedFrame.Visible then RefreshSavedUI() end end)
+SettingsToggleBtn.MouseButton1Click:Connect(function() ToggleDockFrame(SettingsFrame) end)
+CreditsHubBtn.MouseButton1Click:Connect(function() ToggleDockFrame(CreditsFrame) end)
+ScriptHubBtn.MouseButton1Click:Connect(function() ToggleDockFrame(ScriptFrame) if ScriptFrame.Visible then RefreshScriptsUI() end end)
+RemoteHubBtn.MouseButton1Click:Connect(function() ToggleDockFrame(RemoteFrame) if RemoteFrame.Visible then RefreshRemotesUI() end end)
+WorkspaceHubBtn.MouseButton1Click:Connect(function() ToggleDockFrame(WorkspaceExplorerFrame) if WorkspaceExplorerFrame.Visible then RenderRealtimeTree() end end)
+
+GlobalESPBtn.MouseButton1Click:Connect(function()
+    ZenithStore.GlobalESPActive = not ZenithStore.GlobalESPActive
+    if ZenithStore.GlobalESPActive then
+        GlobalESPBtn.BackgroundColor3 = Theme.Success
+        GlobalESPBtn.TextColor3 = Theme.Background
+    else
+        GlobalESPBtn.BackgroundColor3 = Theme.Background
+        GlobalESPBtn.TextColor3 = Theme.Text
+        CurrentHoverHighlight.Adornee = nil
+        HoverBillboard.Enabled = false
+    end
+end)
+
+local function SyncUIPosition()
+    local target = ZenithStore.SidebarOpen and UDim2.new(1, -420, 0.5, -280) or UDim2.new(1, -45, 0.5, -280)
+    TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = target}):Play()
+    SlideBtn.Text = ZenithStore.SidebarOpen and "▶" or "◀"
+end
+
+SlideBtn.MouseButton1Click:Connect(function()
+    ZenithStore.SidebarOpen = not ZenithStore.SidebarOpen
+    SyncUIPosition()
+end)
+
+ToggleEngineBtn.MouseButton1Click:Connect(function()
+    if ZenithStore.TeleportMode == "FAST" then
+        ZenithStore.TeleportMode = "TWEEN"
+        ToggleEngineBtn.Text = "TELEPORT ENGINE: TWEEN"
+        ToggleEngineBtn.BackgroundColor3 = Theme.Purple
+    else
+        ZenithStore.TeleportMode = "FAST"
+        ToggleEngineBtn.Text = "TELEPORT ENGINE: FAST"
+        ToggleEngineBtn.BackgroundColor3 = Theme.Accent
+    end
+end)
+
+ZeroHoldBtn.MouseButton1Click:Connect(function() 
+    ZenithStore.ForceZeroHold = not ZenithStore.ForceZeroHold
+    ZeroHoldBtn.Text = ZenithStore.ForceZeroHold and "FORCE INSTANT AUTOMATION HOLD: ON" or "FORCE INSTANT AUTOMATION HOLD: OFF"
+    ZeroHoldBtn.BackgroundColor3 = ZenithStore.ForceZeroHold and Theme.Success or Theme.Secondary 
+end)
+
+SpeedInput.FocusLost:Connect(function() local n = tonumber(SpeedInput.Text) if n then ZenithStore.TweenSpeed = n end end)
+BlinkTimeInput.FocusLost:Connect(function() local n = tonumber(BlinkTimeInput.Text) if n then ZenithStore.BlinkDelay = n end end)
+
+local InputConn = UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode.Name == ZenithStore.ToggleKey then 
+        ZenithStore.UIVisible = not ZenithStore.UIVisible
+        MainFrame.Visible = ZenithStore.UIVisible and not DisclaimerFrame.Visible
+        if not ZenithStore.UIVisible then ToggleDockFrame(nil) end
+    end
+end)
+table.insert(ZenithStore.Connections, InputConn)
+
+SearchBar:GetPropertyChangedSignal("Text"):Connect(RenderMapCollection)
+WorkspaceSearchBar:GetPropertyChangedSignal("Text"):Connect(RenderRealtimeTree)
+
+task.spawn(function()
+    local info = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    TweenService:Create(DisclaimerFrame, info, {BackgroundTransparency = 0}):Play()
+    TweenService:Create(DisclaimerFrame.UIStroke, info, {Transparency = 0}):Play()
+    TweenService:Create(DiscTitle, info, {TextTransparency = 0}):Play()
+    TweenService:Create(DiscMsg, info, {TextTransparency = 0}):Play()
+    TweenService:Create(DiscBtn, info, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
+    TweenService:Create(DiscBtn.UIStroke, info, {Transparency = 0}):Play()
+end)
+
+DiscBtn.MouseButton1Click:Connect(function()
+    local info = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+    TweenService:Create(DisclaimerFrame, info, {BackgroundTransparency = 1}):Play()
+    TweenService:Create(DisclaimerFrame.UIStroke, info, {Transparency = 1}):Play()
+    TweenService:Create(DiscTitle, info, {TextTransparency = 1}):Play()
+    TweenService:Create(DiscMsg, info, {TextTransparency = 1}):Play()
+    TweenService:Create(DiscBtn, info, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+    local tw = TweenService:Create(DiscBtn.UIStroke, info, {Transparency = 1})
+    tw:Play()
+    tw.Completed:Wait()
+    
+    DisclaimerFrame.Visible = false
+    MainFrame.Visible = true
+    pcall(MasterEngineRefreshIndex)
+    SyncUIPosition()
+end)
